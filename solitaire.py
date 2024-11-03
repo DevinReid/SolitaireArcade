@@ -220,9 +220,27 @@ class MyGame(arcade.Window):
         self.card_list.remove(card)
         self.card_list.append(card)
 
+    def draw_three_cards(self):
+        """ Draw three cards from the draw pile """
+        # Draw up to three cards from the face-down pile
+        for i in range(3):
+            if len(self.piles[BOTTOM_FACE_DOWN_PILE]) == 0:
+                break
+            # Get the top card
+            card = self.piles[BOTTOM_FACE_DOWN_PILE][-1]
+            # Flip face up
+            card.face_up()
+            # Move card position to bottom-right face-up pile
+            card.position = self.pile_mat_list[BOTTOM_FACE_UP_PILE].position
+            # Remove card from face-down pile
+            self.piles[BOTTOM_FACE_DOWN_PILE].remove(card)
+            # Move card to face-up list
+            self.piles[BOTTOM_FACE_UP_PILE].append(card)
+            # Put on top draw-order wise
+            self.pull_to_top(card)
+
     def on_mouse_press(self, x, y, button, key_modifiers):
         """ Called when the user presses a mouse button. """
-        
         # Get list of cards we've clicked on
         cards = arcade.get_sprites_at_point((x, y), self.card_list)
 
@@ -237,24 +255,16 @@ class MyGame(arcade.Window):
             pile_index = self.get_pile_for_card(primary_card)
 
             # Are we clicking on the bottom deck, to flip three cards?
-            if pile_index == BOTTOM_FACE_DOWN_PILE:
-                # Flip three cards
-                for i in range(3):
-                    # If we ran out of cards, stop
-                    if len(self.piles[BOTTOM_FACE_DOWN_PILE]) == 0:
-                        break
-                    # Get top card
-                    card = self.piles[BOTTOM_FACE_DOWN_PILE][-1]
-                    # Flip face up
-                    card.face_up()
-                    # Move card position to bottom-right face up pile
-                    card.position = self.pile_mat_list[BOTTOM_FACE_UP_PILE].position
-                    # Remove card from face down pile
-                    self.piles[BOTTOM_FACE_DOWN_PILE].remove(card)
-                    # Move card to face up list
-                    self.piles[BOTTOM_FACE_UP_PILE].append(card)
-                    # Put on top draw-order wise
-                    self.pull_to_top(card)
+            if pile_index == BOTTOM_FACE_DOWN_PILE and len(self.piles[BOTTOM_FACE_UP_PILE]) == 0:
+                # Flip three cards if the face-up pile is empty
+                self.draw_three_cards()
+
+            elif pile_index == BOTTOM_FACE_DOWN_PILE:
+                # If we still have cards in the face-up pile, don't allow drawing more until they are used
+                if len(self.piles[BOTTOM_FACE_UP_PILE]) > 0:
+                    return
+                # Otherwise, draw three more cards
+                self.draw_three_cards()
 
             elif primary_card.is_face_down:
                 # Is the card face down? In one of those middle 7 piles? Then flip up
@@ -311,21 +321,20 @@ class MyGame(arcade.Window):
         self.piles[pile_index].append(card)
 
     def on_mouse_release(self, x: float, y: float, button: int,
-                         modifiers: int):
+                        modifiers: int):
         """ Called when the user presses a mouse button. """
-         # If we don't have any cards, who cares
+        # If we don't have any cards, who cares
         if len(self.held_cards) == 0:
             return
 
-# Find the closest pile, in case we are in contact with more than one
+        # Find the closest pile, in case we are in contact with more than one
         pile, distance = arcade.get_closest_sprite(self.held_cards[0], self.pile_mat_list)
         reset_position = True
 
         # See if we are in contact with the closest pile
         if arcade.check_for_collision(self.held_cards[0], pile):
 
-
-             # What pile is it?
+            # What pile is it?
             pile_index = self.pile_mat_list.index(pile)
 
             #  Is it the same pile we came from?
@@ -336,44 +345,157 @@ class MyGame(arcade.Window):
             elif PLAY_PILE_1 <= pile_index <= PLAY_PILE_7:
                 # Are there already cards there?
                 if len(self.piles[pile_index]) > 0:
-                    # Move cards to proper position
+                    # Get the top card of the pile
                     top_card = self.piles[pile_index][-1]
-                    for i, dropped_card in enumerate(self.held_cards):
-                        dropped_card.position = top_card.center_x, \
-                                                top_card.center_y - CARD_VERTICAL_OFFSET * (i + 1)
+                    
+                    # Check if the card being moved is one rank lower and of alternating color
+                    if self.can_stack_card(self.held_cards[0], top_card):
+                        # Move cards to proper position
+                        for i, dropped_card in enumerate(self.held_cards):
+                            dropped_card.position = top_card.center_x, \
+                                                    top_card.center_y - CARD_VERTICAL_OFFSET * (i + 1)
+                        for card in self.held_cards:
+                            # Cards are in the right position, but we need to move them to the right list
+                            self.move_card_to_new_pile(card, pile_index)
+
+                        # Success, don't reset position of cards
+                        reset_position = False
                 else:
                     # Are there no cards in the middle play pile?
-                    for i, dropped_card in enumerate(self.held_cards):
-                        # Move cards to proper position
-                        dropped_card.position = pile.center_x, \
-                                                pile.center_y - CARD_VERTICAL_OFFSET * i
-                        
-                for card in self.held_cards:
-                    # Cards are in the right position, but we need to move them to the right list
-                    self.move_card_to_new_pile(card, pile_index)
+                    # Only allow Kings to be placed in empty spots
+                    if self.held_cards[0].value == "K":
+                        for i, dropped_card in enumerate(self.held_cards):
+                            # Move cards to proper position
+                            dropped_card.position = pile.center_x, \
+                                                    pile.center_y - CARD_VERTICAL_OFFSET * i
+                        for card in self.held_cards:
+                            # Cards are in the right position, but we need to move them to the right list
+                            self.move_card_to_new_pile(card, pile_index)
 
-                # Success, don't reset position of cards
-                reset_position = False
-                    
+                        # Success, don't reset position of cards
+                        reset_position = False
+
             elif TOP_PILE_1 <= pile_index <= TOP_PILE_4 and len(self.held_cards) == 1:
-                # Move position of card to pile
-                self.held_cards[0].position = pile.position
-                # Move card to card list
-                for card in self.held_cards:
-                    self.move_card_to_new_pile(card, pile_index)
+                # Check if the foundation pile is empty and the card is an Ace
+                if len(self.piles[pile_index]) == 0 and self.held_cards[0].value == "A":
+                    # Move position of card to pile
+                    self.held_cards[0].position = pile.position
+                    # Move card to card list
+                    for card in self.held_cards:
+                        self.move_card_to_new_pile(card, pile_index)
 
-                reset_position = False
+                    reset_position = False
+                # Check if the card can be added to the foundation pile (same suit and ascending order)
+                elif len(self.piles[pile_index]) > 0:
+                    top_card = self.piles[pile_index][-1]
+                    if self.can_add_to_foundation(self.held_cards[0], top_card):
+                        # Move position of card to pile
+                        self.held_cards[0].position = pile.position
+                        # Move card to card list
+                        for card in self.held_cards:
+                            self.move_card_to_new_pile(card, pile_index)
 
+                        reset_position = False
 
-            # Release on top play pile? And only one card held?
+        # If the move wasn't valid, reset the cards to their original position
         if reset_position:
-            # Where-ever we were dropped, it wasn't valid. Reset the each card's position
-            # to its original spot.
             for pile_index, card in enumerate(self.held_cards):
                 card.position = self.held_cards_original_position[pile_index]
 
         # We are no longer holding cards
         self.held_cards = []
+        # Check if the game has been won
+        if self.check_for_win():
+            print("Congratulations! You've won the game!")
+
+            # Check if no moves are left
+        print("Checking for moves left")
+        if self.check_no_moves_left():
+            print("No more moves available. Game over!")
+            self.setup()
+        else:
+            print("a move is left")
+
+    def can_stack_card(self, moving_card, target_card):
+        """ Check if the moving card can be stacked on the target card """
+        # Check if the cards are of alternating colors
+        is_alternating_color = (moving_card.suit in ["Hearts", "Diamonds"] and target_card.suit in ["Clubs", "Spades"]) or \
+                            (moving_card.suit in ["Clubs", "Spades"] and target_card.suit in ["Hearts", "Diamonds"])
+        # Check if the moving card is one rank lower than the target card
+        is_one_rank_lower = CARD_VALUES.index(moving_card.value) == CARD_VALUES.index(target_card.value) - 1
+
+        return is_alternating_color and is_one_rank_lower
+
+    def can_add_to_foundation(self, moving_card, target_card):
+        """ Check if the moving card can be added to the foundation pile """
+        # Check if the cards are of the same suit
+        is_same_suit = moving_card.suit == target_card.suit
+        # Check if the moving card is one rank higher than the target_card
+        is_one_rank_higher = CARD_VALUES.index(moving_card.value) == CARD_VALUES.index(target_card.value) + 1
+
+        return is_same_suit and is_one_rank_higher
+
+    def check_for_win(self):
+        """ Check if the player has won the game """
+        # Check if all foundation piles have 13 cards (Ace to King)
+        for pile_index in range(TOP_PILE_1, TOP_PILE_4 + 1):
+            if len(self.piles[pile_index]) != 13:
+                return False
+        return True
+    
+    def check_no_moves_left(self):
+    
+        """ Check if there are no moves left in the game """
+        # Check if there are any face-down cards in the play piles that can be flipped
+        for pile_index in range(PLAY_PILE_1, PLAY_PILE_7 + 1):
+            if len(self.piles[pile_index]) > 0:
+                for card in self.piles[pile_index]:
+                    if card.is_face_down:
+                        return False
+
+        # Check if there are any cards left in the face-down pile to be dealt, only if there are no face-up cards
+        if len(self.piles[BOTTOM_FACE_DOWN_PILE]) > 0 and len(self.piles[BOTTOM_FACE_UP_PILE]) == 0:
+            return False
+
+        # Check if there are any valid moves left in the play piles
+        for pile_index in range(PLAY_PILE_1, PLAY_PILE_7 + 1):
+            if len(self.piles[pile_index]) > 0:
+                top_card = self.piles[pile_index][-1]
+                # Check if the card can be moved to another play pile or foundation pile
+                for target_pile_index in range(PLAY_PILE_1, PLAY_PILE_7 + 1):
+                    if pile_index != target_pile_index and len(self.piles[target_pile_index]) > 0:
+                        target_card = self.piles[target_pile_index][-1]
+                        if self.can_stack_card(top_card, target_card):
+                            return False
+                for target_pile_index in range(TOP_PILE_1, TOP_PILE_4 + 1):
+                    if len(self.piles[target_pile_index]) > 0:
+                        target_card = self.piles[target_pile_index][-1]
+                        if self.can_add_to_foundation(top_card, target_card):
+                            return False
+                    elif top_card.value == "A":
+                        return False
+
+        # Check if there are any valid moves left in the face-up pile
+        if len(self.piles[BOTTOM_FACE_UP_PILE]) > 0:
+            top_card = self.piles[BOTTOM_FACE_UP_PILE][-1]
+            # Check if the top card from the draw pile can be moved to a play pile or foundation pile
+            for target_pile_index in range(PLAY_PILE_1, PLAY_PILE_7 + 1):
+                if len(self.piles[target_pile_index]) > 0:
+                    target_card = self.piles[target_pile_index][-1]
+                    if self.can_stack_card(top_card, target_card):
+                        return False
+                elif top_card.value == "K":
+                    return False
+            for target_pile_index in range(TOP_PILE_1, TOP_PILE_4 + 1):
+                if len(self.piles[target_pile_index]) > 0:
+                    target_card = self.piles[target_pile_index][-1]
+                    if self.can_add_to_foundation(top_card, target_card):
+                        return False
+                elif top_card.value == "A":
+                    return False
+
+        # If no valid moves are found, return True indicating no moves are left
+        return True
 
     def on_mouse_motion(self, x: float, y: float, dx: float, dy: float):
         """ User moves mouse """
