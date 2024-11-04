@@ -112,6 +112,9 @@ class MyGame(arcade.Window):
 
           # List of cards we are dragging with the mouse
         self.held_cards = None
+        self.move_counter = 0
+
+        self.waiting_for_click = False
 
         # Original location of cards we are dragging with the mouse in case
         # they have to go back.
@@ -322,6 +325,11 @@ class MyGame(arcade.Window):
 
     def on_mouse_release(self, x: float, y: float, button: int,
                         modifiers: int):
+        if self.waiting_for_click:
+            self.waiting_for_click = False
+            self.message = ""
+            self.setup()
+            return
         """ Called when the user presses a mouse button. """
         # If we don't have any cards, who cares
         if len(self.held_cards) == 0:
@@ -404,17 +412,42 @@ class MyGame(arcade.Window):
 
         # We are no longer holding cards
         self.held_cards = []
-        # Check if the game has been won
+
+        self.move_counter +=1
         if self.check_for_win():
             print("Congratulations! You've won the game!")
+            self.message = "Congratulations! You've won the game!"
+            self.waiting_for_click = True
 
-            # Check if no moves are left
-        print("Checking for moves left")
+    # Check if no moves are left
         if self.check_no_moves_left():
             print("No more moves available. Game over!")
-            self.setup()
-        else:
-            print(self.check_no_moves_left())
+            self.message = "No more moves available. Game over!"
+            self.waiting_for_click = True
+            
+
+    def on_draw(self):
+        """ Render the screen. """
+        # Clear the screen
+        self.clear()
+
+        # Draw the mats the cards go on to
+        self.pile_mat_list.draw()
+
+        # Draw the cards
+        self.card_list.draw()
+
+        # Draw the message if there is one
+        if hasattr(self, 'message') and self.message:
+            arcade.draw_text(
+                self.message,
+                SCREEN_WIDTH / 2,
+                SCREEN_HEIGHT / 2,
+                arcade.color.BLACK,
+                font_size=20,
+                anchor_x="center",
+                anchor_y="center"
+            )
 
     def can_stack_card(self, moving_card, target_card):
         """ Check if the moving card can be stacked on the target card """
