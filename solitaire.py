@@ -414,7 +414,7 @@ class MyGame(arcade.Window):
             print("No more moves available. Game over!")
             self.setup()
         else:
-            print("a move is left")
+            print(self.check_no_moves_left())
 
     def can_stack_card(self, moving_card, target_card):
         """ Check if the moving card can be stacked on the target card """
@@ -444,17 +444,18 @@ class MyGame(arcade.Window):
         return True
     
     def check_no_moves_left(self):
-    
         """ Check if there are no moves left in the game """
         # Check if there are any face-down cards in the play piles that can be flipped
         for pile_index in range(PLAY_PILE_1, PLAY_PILE_7 + 1):
             if len(self.piles[pile_index]) > 0:
-                for card in self.piles[pile_index]:
-                    if card.is_face_down:
-                        return False
+                    # Ensure there are no face-up cards above the face-down card
+                if self.piles[pile_index][-1].is_face_down:
+                    print(f"Face-down card found in pile {pile_index - 1} with no face-up cards above, returning False.")
+                    return False
 
         # Check if there are any cards left in the face-down pile to be dealt, only if there are no face-up cards
         if len(self.piles[BOTTOM_FACE_DOWN_PILE]) > 0 and len(self.piles[BOTTOM_FACE_UP_PILE]) == 0:
+            print("Face-down pile is not empty and face-up pile is empty, returning False.")
             return False
 
         # Check if there are any valid moves left in the play piles
@@ -466,13 +467,20 @@ class MyGame(arcade.Window):
                     if pile_index != target_pile_index and len(self.piles[target_pile_index]) > 0:
                         target_card = self.piles[target_pile_index][-1]
                         if self.can_stack_card(top_card, target_card):
+                            # Prevent recognizing moves that simply reverse the last move
+                            if self.held_cards_original_position and self.held_cards_original_position[0] == self.pile_mat_list[target_pile_index].position:
+                                continue
+
+                            print(f"Can stack {top_card} from pile {pile_index -1 } onto {target_card} in pile {target_pile_index -1}, returning False.")
                             return False
                 for target_pile_index in range(TOP_PILE_1, TOP_PILE_4 + 1):
                     if len(self.piles[target_pile_index]) > 0:
                         target_card = self.piles[target_pile_index][-1]
                         if self.can_add_to_foundation(top_card, target_card):
+                            print(f"Can add {top_card} from pile {pile_index -1} to foundation pile {target_pile_index -1}, returning False.")
                             return False
                     elif top_card.value == "A":
+                        print(f"Top card {top_card} is an Ace and can be moved to an empty foundation pile, returning False.")
                         return False
 
         # Check if there are any valid moves left in the face-up pile
@@ -483,20 +491,24 @@ class MyGame(arcade.Window):
                 if len(self.piles[target_pile_index]) > 0:
                     target_card = self.piles[target_pile_index][-1]
                     if self.can_stack_card(top_card, target_card):
+                        print(f"Can stack {top_card} from face-up pile onto {target_card} in play pile {target_pile_index -1 }, returning False.")
                         return False
                 elif top_card.value == "K":
+                    print(f"Top card {top_card} is a King and can be moved to an empty play pile, returning False.")
                     return False
             for target_pile_index in range(TOP_PILE_1, TOP_PILE_4 + 1):
                 if len(self.piles[target_pile_index]) > 0:
                     target_card = self.piles[target_pile_index][-1]
                     if self.can_add_to_foundation(top_card, target_card):
+                        print(f"Can add {top_card} from face-up pile to foundation pile {target_pile_index -1}, returning False.")
                         return False
                 elif top_card.value == "A":
+                    print(f"Top card {top_card} is an Ace and can be moved to an empty foundation pile, returning False.")
                     return False
 
         # If no valid moves are found, return True indicating no moves are left
+        print("No moves left, returning True.")
         return True
-
     def on_mouse_motion(self, x: float, y: float, dx: float, dy: float):
         """ User moves mouse """
         # If we are holding cards, move them with the mouse
